@@ -1,0 +1,58 @@
+# Weekly copy of every product photo used on the website (Armani-BAH/armani-site),
+# so the site still has its pictures if a link on Armani's site stops working.
+# Runs every Friday morning (Bahrain time) and can be started by hand from the Actions tab.
+name: Photo backup
+
+on:
+  schedule:
+    - cron: "17 3 * * 5"     # Friday 06:17 Bahrain time
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: photo-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    steps:
+      - name: Get the saved photos
+        uses: actions/checkout@v4
+        with:
+          path: photos
+
+      - name: Get the website's product list
+        run: curl -fsSL -o products.json https://raw.githubusercontent.com/Armani-BAH/armani-site/main/data/products.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Save new photos and check links
+        run: |
+          pip install --quiet pillow
+          python photos/scripts/backup_photos.py products.json photos
+
+      - name: Store the copies
+        working-directory: photos
+        run: |
+          git config user.name "photo-backup"
+          git config user.email "photo-backup@users.noreply.github.com"
+          git add -A
+          if git diff --cached --quiet; then echo "Nothing new"; exit 0; fi
+          git commit -q -m "Photo backup $(TZ=Asia/Bahrain date +%Y-%m-%d)"
+          git push -q origin HEAD
+
+      - name: Post the weekly report
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh label create photo-report --color BFD4F2 --description "Weekly photo backup report" --force >/dev/null
+          for n in $(gh issue list --label photo-report --state open --json number --jq '.[].number'); do gh issue close "$n" >/dev/null; done
+          gh issue create --label photo-report --title "Photo backup report — $(TZ=Asia/Bahrain date '+%d %b %Y')" --body-file photos/REPORT.md
