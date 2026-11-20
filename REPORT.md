@@ -1,4 +1,4 @@
-# Photo backup report — 13 Nov 2026
+# Photo backup report — 20 Nov 2026
 
 - **Photos on the website:** 2141
 - **Saved copies:** 2141 (192 MB)
